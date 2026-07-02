@@ -1,0 +1,68 @@
+name: Build Debug APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-test-app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Read versionCode / versionName from build.gradle
+        id: version
+        run: |
+          CODE=$(grep -oP 'versionCode\s+\K[0-9]+' app/build.gradle)
+          NAME=$(grep -oP 'versionName\s+"\K[^"]+' app/build.gradle)
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install OneDrive upload dependencies
+        run: pip install requests
+
+      - name: Upload APK to OneDrive & regenerate manifest.json
+        env:
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MS_TENANT_ID: ${{ secrets.MS_TENANT_ID }}
+          MS_REFRESH_TOKEN: ${{ secrets.MS_REFRESH_TOKEN }}
+          MS_FOLDER_PATH: "AppReleases"
+          APP_VERSION_CODE: ${{ steps.version.outputs.code }}
+          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: python scripts/upload_to_onedrive.py
+
+      - name: Commit updated manifest.json back to the repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git diff --cached --quiet || git commit -m "Auto-update manifest.json for v${{ steps.version.outputs.name }} (code ${{ steps.version.outputs.code }}) [skip ci]"
+          git push
