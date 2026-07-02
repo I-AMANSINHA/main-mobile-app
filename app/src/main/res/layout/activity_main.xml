@@ -16,7 +16,7 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="?attr/colorPrimary"
-            app:title="Update Test App"
+            app:title="Test App"
             app:titleTextColor="@android:color/white" />
 
         <LinearLayout
